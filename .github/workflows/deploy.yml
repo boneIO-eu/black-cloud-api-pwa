@@ -32,6 +32,6 @@ jobs:
             CF_ZONE_ID
             MASTER_SECRET
         env:
-          CF_API_TOKEN: ${{ secrets.CF_DNS_API_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
           CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
           MASTER_SECRET: ${{ secrets.MASTER_SECRET }}
