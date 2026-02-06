@@ -1,0 +1,24 @@
+{
+  "name": "black-cloud-api-pwa",
+  "version": "1.0.0",
+  "description": "boneIO Black Cloud API for PWA - DNS registration and SSL certificate distribution",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest"
+  },
+  "keywords": [
+    "boneio",
+    "cloudflare-workers",
+    "pwa"
+  ],
+  "author": "boneIO",
+  "license": "GPL-3.0",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241205.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0",
+    "wrangler": "^3.99.0"
+  }
+}

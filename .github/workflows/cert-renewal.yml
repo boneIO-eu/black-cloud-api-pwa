@@ -1,0 +1,68 @@
+name: Renew SSL Certificate
+
+on:
+  schedule:
+    # Run every 60 days at 3:00 AM UTC
+    - cron: '0 3 1 */2 *'
+  workflow_dispatch:
+
+jobs:
+  renew-cert:
+    runs-on: ubuntu-latest
+    name: Renew Wildcard SSL Certificate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install certbot
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y certbot python3-certbot-dns-cloudflare
+
+      - name: Create Cloudflare credentials file
+        run: |
+          mkdir -p ~/.secrets
+          echo "dns_cloudflare_api_token = ${{ secrets.CF_DNS_API_TOKEN }}" > ~/.secrets/cloudflare.ini
+          chmod 600 ~/.secrets/cloudflare.ini
+
+      - name: Request wildcard certificate
+        run: |
+          sudo certbot certonly \
+            --dns-cloudflare \
+            --dns-cloudflare-credentials ~/.secrets/cloudflare.ini \
+            --dns-cloudflare-propagation-seconds 60 \
+            -d "*.black.boneio.app" \
+            --non-interactive \
+            --agree-tos \
+            --email ${{ secrets.CERT_EMAIL }} \
+            --cert-name boneio-wildcard
+
+      - name: Upload certificate to Worker KV
+        run: |
+          # Read certificate and key
+          CERT=$(sudo cat /etc/letsencrypt/live/boneio-wildcard/fullchain.pem | base64 -w 0)
+          KEY=$(sudo cat /etc/letsencrypt/live/boneio-wildcard/privkey.pem | base64 -w 0)
+          
+          # Get certificate expiry date
+          EXPIRES=$(sudo openssl x509 -enddate -noout -in /etc/letsencrypt/live/boneio-wildcard/fullchain.pem | cut -d= -f2)
+          
+          # Upload to KV using Cloudflare API
+          curl -X PUT "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/storage/kv/namespaces/${{ secrets.CF_KV_NAMESPACE_ID }}/values/ssl:cert" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: text/plain" \
+            --data "$CERT"
+          
+          curl -X PUT "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/storage/kv/namespaces/${{ secrets.CF_KV_NAMESPACE_ID }}/values/ssl:key" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: text/plain" \
+            --data "$KEY"
+          
+          # Upload metadata
+          METADATA=$(echo "{\"expiresAt\": \"$EXPIRES\", \"issuedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" | base64 -w 0)
+          curl -X PUT "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/storage/kv/namespaces/${{ secrets.CF_KV_NAMESPACE_ID }}/values/ssl:metadata" \
+            -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
+            -H "Content-Type: text/plain" \
+            --data "$METADATA"
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f ~/.secrets/cloudflare.ini

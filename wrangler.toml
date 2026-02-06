@@ -1,0 +1,22 @@
+name = "black-cloud-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-05"
+
+# Route configuration - update after setting up custom domain
+# routes = [
+#   { pattern = "api.boneio.app/*", zone_name = "boneio.app" }
+# ]
+
+# KV Namespace for storing certificates and rate limiting
+[[kv_namespaces]]
+binding = "BONEIO_KV"
+id = "YOUR_KV_NAMESPACE_ID"  # Replace after creating KV namespace
+
+# Environment variables (set via wrangler secret)
+# CF_API_TOKEN - Cloudflare API token with DNS edit permissions
+# CF_ZONE_ID - Zone ID for boneio.app
+
+[vars]
+SUBDOMAIN_SUFFIX = "black.boneio.app"
+RATE_LIMIT_MAX = 10
+RATE_LIMIT_WINDOW_HOURS = 1
