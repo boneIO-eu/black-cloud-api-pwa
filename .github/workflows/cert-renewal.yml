@@ -21,7 +21,7 @@ jobs:
       - name: Create Cloudflare credentials file
         run: |
           mkdir -p ~/.secrets
-          echo "dns_cloudflare_api_token = ${{ secrets.CF_DNS_API_TOKEN }}" > ~/.secrets/cloudflare.ini
+          echo "dns_cloudflare_api_token = ${{ secrets.CF_API_TOKEN }}" > ~/.secrets/cloudflare.ini
           chmod 600 ~/.secrets/cloudflare.ini
 
       - name: Request wildcard certificate
