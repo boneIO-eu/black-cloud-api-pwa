@@ -13,6 +13,7 @@ export interface Env {
   BONEIO_KV: KVNamespace;
   CF_API_TOKEN: string;
   CF_ZONE_ID: string;
+  MASTER_SECRET: string;
   SUBDOMAIN_SUFFIX: string;
   RATE_LIMIT_MAX: string;
   RATE_LIMIT_WINDOW_HOURS: string;
@@ -21,6 +22,58 @@ export interface Env {
 interface RegisterRequest {
   serial: string;
   ip: string;
+}
+
+/**
+ * Computes HMAC-SHA256 token for a given serial using the master secret.
+ */
+async function computeHMAC(secret: string, serial: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(serial));
+  return Array.from(new Uint8Array(signature))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+/**
+ * Verifies the Authorization header contains a valid HMAC token for the given serial.
+ * Expected format: "Bearer <hmac-hex>"
+ */
+async function verifyAuth(
+  request: Request,
+  serial: string,
+  masterSecret: string
+): Promise<boolean> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return false;
+  }
+  const token = authHeader.slice(7);
+  const expected = await computeHMAC(masterSecret, serial);
+  return token === expected;
+}
+
+/**
+ * Validates that an IPv4 address is in a private range.
+ * Private ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+ */
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split('.').map(p => parseInt(p, 10));
+  if (parts.length !== 4) return false;
+  // 10.0.0.0/8
+  if (parts[0] === 10) return true;
+  // 172.16.0.0/12
+  if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return true;
+  // 192.168.0.0/16
+  if (parts[0] === 192 && parts[1] === 168) return true;
+  return false;
 }
 
 interface RateLimitEntry {
@@ -204,6 +257,25 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
     });
   }
 
+  // Validate private IP
+  if (!isPrivateIPv4(body.ip)) {
+    return new Response(JSON.stringify({
+      error: 'Only private IP addresses are allowed (10.x.x.x, 172.16-31.x.x, 192.168.x.x)',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Verify HMAC authentication
+  const isAuthorized = await verifyAuth(request, body.serial, env.MASTER_SECRET);
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Create DNS record
   const subdomain = `${body.serial}.${env.SUBDOMAIN_SUFFIX}`;
   const result = await upsertDNSRecord(env.CF_API_TOKEN, env.CF_ZONE_ID, subdomain, body.ip);
@@ -240,6 +312,39 @@ async function handleRegister(request: Request, env: Env): Promise<Response> {
  * Handles GET /cert endpoint.
  */
 async function handleGetCert(request: Request, env: Env): Promise<Response> {
+  // Extract serial from query param for auth
+  const url = new URL(request.url);
+  const serial = url.searchParams.get('serial');
+
+  if (!serial || !isValidSerial(serial)) {
+    return new Response(JSON.stringify({
+      error: 'Missing or invalid serial query parameter',
+    }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Verify HMAC authentication
+  const isAuthorized = await verifyAuth(request, serial, env.MASTER_SECRET);
+  if (!isAuthorized) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Check device is registered
+  const device = await env.BONEIO_KV.get(`device:${serial}`);
+  if (!device) {
+    return new Response(JSON.stringify({
+      error: 'Device not registered. Call /register first.',
+    }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   // Get certificate from KV
   const cert = await env.BONEIO_KV.get('ssl:cert');
   const key = await env.BONEIO_KV.get('ssl:key');

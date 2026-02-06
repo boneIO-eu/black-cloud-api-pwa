@@ -56,8 +56,8 @@ jobs:
             -H "Content-Type: text/plain" \
             --data "$KEY"
           
-          # Upload metadata
-          METADATA=$(echo "{\"expiresAt\": \"$EXPIRES\", \"issuedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}" | base64 -w 0)
+          # Upload metadata as plain JSON
+          METADATA="{\"expiresAt\": \"$EXPIRES\", \"issuedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"
           curl -X PUT "https://api.cloudflare.com/client/v4/accounts/${{ secrets.CF_ACCOUNT_ID }}/storage/kv/namespaces/${{ secrets.CF_KV_NAMESPACE_ID }}/values/ssl:metadata" \
             -H "Authorization: Bearer ${{ secrets.CF_API_TOKEN }}" \
             -H "Content-Type: text/plain" \
