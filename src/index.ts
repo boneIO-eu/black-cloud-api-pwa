@@ -159,7 +159,10 @@ async function upsertDNSRecord(
   const listData = await listResponse.json() as { success: boolean; result: Array<{ id: string }> };
 
   if (!listData.success) {
-    return { success: false, error: 'Failed to query DNS records' };
+    const errDetail = (listData as any).errors
+      ? JSON.stringify((listData as any).errors)
+      : JSON.stringify(listData);
+    return { success: false, error: `Failed to query DNS records: ${errDetail}` };
   }
 
   const recordData = {

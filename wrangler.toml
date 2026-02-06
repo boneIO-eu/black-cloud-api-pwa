@@ -21,3 +21,8 @@ id = "806f9da8954b4968a59746f020513ae5"
 SUBDOMAIN_SUFFIX = "black.boneio.app"
 RATE_LIMIT_MAX = 10
 RATE_LIMIT_WINDOW_HOURS = 1
+
+[observability]
+[observability.logs]
+enabled = true
+invocation_logs = true
