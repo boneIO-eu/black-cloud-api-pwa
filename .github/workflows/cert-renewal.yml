@@ -2,8 +2,11 @@ name: Renew SSL Certificate
 
 on:
   schedule:
-    # Run every 60 days at 3:00 AM UTC
-    - cron: '0 3 1 */2 *'
+    # Run on 1st and 15th of every month at 3:00 AM UTC
+    # Let's Encrypt certs last 90 days, certbot renews at <30 days left
+    # ⚠️ GitHub disables scheduled workflows after 60 days of inactivity
+    #    see keepalive.yml which prevents this
+    - cron: '0 3 1,15 * *'
   workflow_dispatch:
 
 jobs:

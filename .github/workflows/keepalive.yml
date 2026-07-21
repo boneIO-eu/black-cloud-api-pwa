@@ -1,0 +1,39 @@
+name: Keepalive — prevent GitHub from disabling scheduled workflows
+
+# GitHub disables scheduled workflows after 60 days of repo inactivity.
+# This workflow runs every 50 days and creates a lightweight commit to keep
+# the repository "active". It specifically targets cert-renewal.yml which
+# MUST run on schedule to renew SSL certificates for *.black.boneio.app.
+
+on:
+  schedule:
+    # Every 50 days at 2:00 AM UTC (well within the 60-day limit)
+    - cron: '0 2 */50 * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update keepalive timestamp
+        run: |
+          echo "Last keepalive: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > .github/.keepalive
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/.keepalive
+          # Only commit if there are changes (avoids error on re-run)
+          git diff --staged --quiet || git commit -m "chore: keepalive to prevent workflow disabling"
+          git push
+
+      - name: Re-enable cert-renewal workflow if disabled
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Ensure the cert-renewal workflow stays enabled
+          gh workflow enable cert-renewal.yml 2>/dev/null || true
+          echo "✅ cert-renewal.yml is enabled"
